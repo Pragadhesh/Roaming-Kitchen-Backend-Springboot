@@ -26,7 +26,7 @@ public class MenuItem {
     @Column(name = "imageUrl",length = 1000)
     private String imageUrl;
 
-    private Double amount;
+    private String amount;
     private UnitOfMeasurement unit;
 
     @ManyToMany(cascade = CascadeType.ALL)
@@ -38,7 +38,16 @@ public class MenuItem {
     @OneToMany(mappedBy = "menuItem")
     private Set<MenuItemUsage> menuItemUsages = new HashSet<>();
 
-    public MenuItem(String itemName, String imageUrl, Double amount, UnitOfMeasurement unit) {
+    private boolean isLow;
+    public boolean isLow() {
+        int amount = Integer.parseInt(this.amount);
+        return amount < 10;
+    }
+    public void setLow(boolean isLow) {
+        this.isLow = isLow;
+    }
+
+    public MenuItem(String itemName, String imageUrl, String amount, UnitOfMeasurement unit) {
                 this.itemName = itemName;
                 this.imageUrl = imageUrl;
                 this.amount = amount;

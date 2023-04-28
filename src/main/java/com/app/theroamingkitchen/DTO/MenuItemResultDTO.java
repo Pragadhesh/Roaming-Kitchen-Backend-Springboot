@@ -9,10 +9,12 @@ import lombok.*;
 @AllArgsConstructor
 @NoArgsConstructor
 @ToString
-public class MenuItemDTO {
+
+public class MenuItemResultDTO {
     private Long id;
     private String itemName;
     private String imageUrl;
     private String amount;
     private UnitOfMeasurement unit;
+    private Boolean status;
 }

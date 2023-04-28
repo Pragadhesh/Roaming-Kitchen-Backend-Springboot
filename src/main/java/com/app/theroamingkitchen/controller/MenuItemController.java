@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api")
 public class MenuItemController {
@@ -30,6 +32,12 @@ public class MenuItemController {
     {
 
         return menuItemService.getMenuItems();
+    }
+
+    @DeleteMapping("/menuitem")
+    public ResponseEntity<Object> deleteMenuItem(@RequestBody MenuItemDTO menuItemDTO)
+    {
+        return menuItemService.deleteMenuItems(menuItemDTO);
     }
 
 
