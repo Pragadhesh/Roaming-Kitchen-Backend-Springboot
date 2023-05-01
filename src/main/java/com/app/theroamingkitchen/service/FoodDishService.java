@@ -1,5 +1,12 @@
 package com.app.theroamingkitchen.service;
 
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.PutObjectResult;
 import com.app.theroamingkitchen.DTO.DetailsDTO;
 import com.app.theroamingkitchen.DTO.FoodDishDTO;
 import com.app.theroamingkitchen.DTO.MenuItemResultDTO;
@@ -18,6 +25,11 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +47,12 @@ public class FoodDishService {
 
     @Value("${imageaccesskey}")
     private String imageaccesskey;
+
+    @Value("${awsaccesskey}")
+    private String awsaccesskey;
+
+    @Value("${awssecretkey}")
+    private String awssecretkey;
 
     @Autowired
     MenuItemRepository menuItemRepository;
@@ -115,6 +133,33 @@ public class FoodDishService {
                 JsonNode quantityNode = ingredientNode.get("quantity");
                 String quantity = quantityNode.fieldNames().next();
                 String value = quantityNode.get(quantity).toString();
+
+                String result;
+                if (value.matches("\\d+")) { // whole number
+                    int intValue = Integer.parseInt(value);
+                    // add logic to handle whole number input
+                    result = String.valueOf(intValue);
+                }
+                else if (value.matches("\\d+\\.\\d+")) { // decimal value
+                    double decimalValue = Double.parseDouble(value);
+                    // add logic to handle decimal input
+                    result = String.valueOf(decimalValue);
+                }
+                else if (value.matches("\\d+/\\d+")) { // fraction
+                    String[] parts = value.split("/");
+                    double decimalValue = Double.parseDouble(parts[0]) / Double.parseDouble(parts[1]);
+                    // add logic to handle fraction input
+                    result = String.valueOf(decimalValue);
+                }
+                else  { // range
+                    String[] parts = value.split("-");
+                    double rangeStart = Double.parseDouble(parts[0]);
+                    double rangeEnd = Double.parseDouble(parts[1]);
+                    double averageValue = (rangeStart + rangeEnd) / 2.0;
+                    // add logic to handle range input
+                    result = String.valueOf(averageValue);
+                }
+                value = result;
                 DetailsDTO dts = new DetailsDTO();
                 if (quantity.startsWith("GR"))
                 {
@@ -157,9 +202,6 @@ public class FoodDishService {
                     String outputString = outputStringBuilder.toString().trim();
                     dts.setDishName(outputString);
                 }
-
-
-
                 System.out.println("DTS Generated");
                 System.out.println(dts);
                 if(detailsDTO.contains(dts))
@@ -178,7 +220,7 @@ public class FoodDishService {
                 }
                 else
                 {
-                    log.info("Generating image for food dish menu"+dts.getDishName());
+                    log.info("Generating image for food dish menu : "+dts.getDishName());
                     // Set the request headers
                     HttpHeaders headers1 = new HttpHeaders();
                     headers1.setContentType(MediaType.APPLICATION_JSON);
@@ -198,12 +240,43 @@ public class FoodDishService {
                     RestTemplate restTemplate1 = new RestTemplate();
                     ResponseEntity<String> response1 = restTemplate1.postForEntity(url1, request1, String.class);
                     ObjectMapper objectMapper1 = new ObjectMapper();
+
                     JsonNode jsonNode = objectMapper1.readTree(response1.getBody());
-                    String imageUrl = jsonNode.get("data").get(0).get("url").asText();
+                    String image = jsonNode.get("data").get(0).get("url").asText();
+
+                    URL imageUrl = new URL(image);
+
+                    BasicAWSCredentials credentials = new BasicAWSCredentials(awsaccesskey, awssecretkey);
+
+                    AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
+                            .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                            .withRegion("ap-south-1")
+                            .build();
+
+                    // Generate a unique key for the object in S3
+                    String s3Key = "images/" + System.currentTimeMillis() + ".jpg";
+
+                    File imageFile = File.createTempFile("image-", ".jpg");
+                    try (InputStream in = imageUrl.openStream(); OutputStream out = new FileOutputStream(imageFile)) {
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, bytesRead);
+                        }
+                    }
+
+                    // Upload the image to S3
+                    PutObjectRequest putRequest = new PutObjectRequest("theroamingkitchen", s3Key, imageFile)
+                            .withCannedAcl(CannedAccessControlList.PublicRead);
+                    PutObjectResult putResult = s3Client.putObject(putRequest);
+
+                    // Get the public URL of the image in S3
+                    String publicUrl = s3Client.getUrl("theroamingkitchen", s3Key).toString();
+
                     results.add(new MenuItemResultDTO(
                             (long) (i),
                             dts.getDishName(),
-                            imageUrl,
+                            publicUrl,
                             value,
                             dts.getUnit(),
                             false
@@ -222,6 +295,66 @@ public class FoodDishService {
             log.info("Entered exception");
             System.out.println(e);
             return new ResponseEntity<>("Error in generating items", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public ResponseEntity<Object> getImagesforDescription(FoodDishDTO foodDishDTO)
+    {
+        log.info("Generating catalog image for "+ foodDishDTO.getDishName());
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + accesskey);
+
+            String url = "https://api.openai.com/v1/images/generations";
+            // Set the request body
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("prompt",foodDishDTO.getDishName());
+            requestBody.put("n", 3);
+            requestBody.put("size", "1024x1024");
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            RestTemplate restTemplate = new RestTemplate();
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonNode = objectMapper.readTree(response.getBody());
+            String image = jsonNode.get("data").get(0).get("url").asText();
+
+            URL imageUrl = new URL(image);
+
+            BasicAWSCredentials credentials = new BasicAWSCredentials(awsaccesskey, awssecretkey);
+
+            AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
+                    .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                    .withRegion("ap-south-1")
+                    .build();
+
+            // Generate a unique key for the object in S3
+            String s3Key = "images/" + System.currentTimeMillis() + ".jpg";
+
+            File imageFile = File.createTempFile("image-", ".jpg");
+            try (InputStream in = imageUrl.openStream(); OutputStream out = new FileOutputStream(imageFile)) {
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                }
+            }
+
+            // Upload the image to S3
+            PutObjectRequest putRequest = new PutObjectRequest("theroamingkitchen", s3Key, imageFile)
+                    .withCannedAcl(CannedAccessControlList.PublicRead);
+            PutObjectResult putResult = s3Client.putObject(putRequest);
+
+            // Get the public URL of the image in S3
+            String publicUrl = s3Client.getUrl("theroamingkitchen", s3Key).toString();
+
+            return new ResponseEntity<>(publicUrl,HttpStatus.OK);
+        }
+        catch (Exception e)
+        {
+            log.info(e.getMessage());
+            return new ResponseEntity<>("Error in Generating image",HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }
