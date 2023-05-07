@@ -151,12 +151,16 @@ public class FoodDishService {
             System.out.println(detailsDTO);
             List<MenuItemResultDTO> results = new ArrayList<>();
 
+            // iterate over the ingredients and create a MenuItemDTO object for each one
+                List<List<CompletableFuture<MenuItemResultDTO>>> allImageGenerationFutures = new ArrayList<>();
 
-            List<CompletableFuture<MenuItemResultDTO>> imageGenerationFutures = new ArrayList<>();
 
             // iterate over the ingredients and create a MenuItemDTO object for each one
-            for (int i = 0; i < size; i++) {
-                System.out.println("Entered for with index "+i);
+                int ingredientIndex = 0;
+                for (int i=0;i<size;i++) {
+
+                    List<CompletableFuture<MenuItemResultDTO>> imageGenerationFutures = new ArrayList<>();
+                System.out.println("Entered for with index "+ingredientIndex);
                 JsonNode ingredientNode = ingredientsNode.get(i);
                 JsonNode quantityNode = ingredientNode.get("quantity");
                 String quantity = quantityNode.fieldNames().next();
@@ -251,7 +255,9 @@ public class FoodDishService {
                     String finalValue = value;
                     CompletableFuture<MenuItemResultDTO> imageGenerationFuture = CompletableFuture.supplyAsync(() -> {
                         try {
-                            log.info("Generating image for food dish menu: " + dts.getDishName());
+                            DetailsDTO localDts = dts;
+                            log.info("Generating image for food dish menu: " + localDts.getDishName());
+
                             // Set the request headers
                             HttpHeaders headers1 = new HttpHeaders();
                             headers1.setContentType(MediaType.APPLICATION_JSON);
@@ -259,7 +265,7 @@ public class FoodDishService {
                             String url1 = "https://api.openai.com/v1/images/generations";
                             // Set the request body
                             Map<String, Object> requestBody1 = new HashMap<>();
-                            requestBody1.put("prompt", "Ingredient-" + dts.getDishName());
+                            requestBody1.put("prompt", "Ingredient-" + localDts.getDishName());
                             requestBody1.put("n", 1);
                             requestBody1.put("size", "1024x1024");
                             HttpEntity<Map<String, Object>> request1 = new HttpEntity<>(requestBody1, headers1);
@@ -298,12 +304,13 @@ public class FoodDishService {
 
                             // Get the public URL of the image in S3
                             String publicUrl = s3Client.getUrl("theroamingkitchen", s3Key).toString();
+
                             return new MenuItemResultDTO(
                                     (long) (finalI),
-                                    dts.getDishName(),
+                                    localDts.getDishName(),
                                     publicUrl,
                                     new Double(finalValue),
-                                    dts.getUnit(),
+                                    localDts.getUnit(),
                                     false
                             );
                         } catch (Exception e) {
@@ -312,26 +319,33 @@ public class FoodDishService {
                             return null;
                         }
                     });
-
                     imageGenerationFutures.add(imageGenerationFuture);
                 }
+                    allImageGenerationFutures.add(imageGenerationFutures);
             }
-
                 // Wait for all image generation tasks to complete
                 CompletableFuture<Void> allImageGenerationFuture = CompletableFuture.allOf(
-                        imageGenerationFutures.toArray(new CompletableFuture[0])
+                        allImageGenerationFutures.stream()
+                                .flatMap(List::stream)
+                                .toArray(CompletableFuture[]::new)
                 );
 
                 // Combine the results of all image generation tasks
                 CompletableFuture<List<MenuItemResultDTO>> combinedImageGenerationFuture = allImageGenerationFuture.thenApplyAsync(v -> {
-                    return imageGenerationFutures.stream()
-                            .map(CompletableFuture::join)
-                            .collect(Collectors.toList());
+                    List<MenuItemResultDTO> combinedResults = new ArrayList<>();
+                    for (List<CompletableFuture<MenuItemResultDTO>> futures : allImageGenerationFutures) {
+                        List<MenuItemResultDTO> imageGenerationResults = futures.stream()
+                                .map(CompletableFuture::join)
+                                .collect(Collectors.toList());
+                        combinedResults.addAll(imageGenerationResults);
+                    }
+                    return combinedResults;
                 });
 
                 try {
                     // Wait for all image generation tasks to complete and retrieve the results
                     List<MenuItemResultDTO> imageGenerationResults = combinedImageGenerationFuture.get();
+
                     // Handle the image generation results and return the response
                     if (imageGenerationResults != null) {
                         results.addAll(imageGenerationResults);

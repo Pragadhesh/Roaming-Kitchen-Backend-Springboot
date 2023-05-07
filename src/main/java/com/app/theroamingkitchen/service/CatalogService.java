@@ -59,6 +59,7 @@ public class CatalogService<FileUrlWrapper> {
 
             String itemId = "#" + catalog.getDishName(); // the ID of the item
             String itemName = catalog.getDishName(); // the name of the item
+            String itemDescription = catalog.getDescription(); // description of the item
 
             CatalogApi catalogApi = client.getCatalogApi();
 
@@ -67,7 +68,7 @@ public class CatalogService<FileUrlWrapper> {
             LinkedList<CatalogObject> variations = new LinkedList<>();
             for (ItemVariationDTO variation : variationsDTO) {
                 Money priceMoney = new Money.Builder()
-                        .amount(variation.getAmount())
+                        .amount(variation.getAmount()*100)
                         .currency("USD")
                         .build();
 
@@ -122,11 +123,11 @@ public class CatalogService<FileUrlWrapper> {
                         return catalogImage;
                     })
                     .thenApply(catalogImage -> {
-                        // Create the item object
                         List<String> imageids = new ArrayList<>();
                         imageids.add(catalogImage.getId());
                         CatalogItem item = new CatalogItem.Builder()
                                 .name(itemName)
+                                .description(itemDescription)
                                 .imageIds(imageids)
                                 .availableOnline(false)
                                 .variations(variations)
@@ -160,15 +161,17 @@ public class CatalogService<FileUrlWrapper> {
                         return null;
                     });
 
-            CatalogObject catalogObject = future.join(); // Wait for the async call to complete
+            CatalogObject catalogObject = future.join();
             String catalogObjectId = catalogObject.getId();
             FoodDish foodDish = foodDishRepository.save(new FoodDish(catalog.getDishName(),catalogObjectId));
 
             List<MenuItemResultDTO> menuitems = catalog.getIngredients();
-            Set<MenuItem> finalMenuItems = null;
+            Set<MenuItem> finalMenuItems = new HashSet<>();
 
             for(int i=0; i<menuitems.size(); i++) {
                 MenuItemResultDTO mt = menuitems.get(i);
+                System.out.println(mt);
+                System.out.println(mt.getStatus());
                 if(mt.getStatus())
                 {
                     Optional<MenuItem> opmt = menuItemRepository.findById(mt.getId());
@@ -180,9 +183,6 @@ public class CatalogService<FileUrlWrapper> {
                         Set<FoodDish> fdish = mts.getFoodDishes();
                         fdish.add(foodDish);
                         mts.setFoodDishes(fdish);
-                        Set<MenuItemUsage> mu = mts.getMenuItemUsages();
-                        mu.add(menuusage);
-                        mts.setMenuItemUsages(mu);
                         MenuItem finalmenuitem =menuItemRepository.save(mts);
                         finalMenuItems.add(finalmenuitem);
                     }
@@ -202,20 +202,14 @@ public class CatalogService<FileUrlWrapper> {
                     MenuItemUsage usage = new MenuItemUsage(initial, foodDish, mt.getAmount());
                     MenuItemUsage menuusage = menuItemUsageRepository.save(usage);
 
-                    Set<MenuItemUsage> mu = initial.getMenuItemUsages();
-                    mu.add(menuusage);
-                    initial.setMenuItemUsages(mu);
-
-                    MenuItem finalmenuitem =menuItemRepository.save(initial);
-                    finalMenuItems.add(finalmenuitem);
-
+                    finalMenuItems.add(initial);
                 }
             }
             foodDish.setMenuItems(finalMenuItems);
             FoodDish finalfooddish = foodDishRepository.save(foodDish);
-
             return new ResponseEntity<>(finalfooddish, HttpStatus.OK);
         } catch (Exception e) {
+            e.printStackTrace();
             log.info(e.getMessage());
             return new ResponseEntity<>("Error in creating catalog object", HttpStatus.INTERNAL_SERVER_ERROR);
         }

@@ -33,5 +33,6 @@ public class MenuItemUsage {
         this.foodDish = foodDish;
         this.quantityUsed = amount;
     }
+
 }
 

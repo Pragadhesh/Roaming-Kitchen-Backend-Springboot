@@ -1,5 +1,6 @@
 package com.app.theroamingkitchen.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.*;
 
 import javax.persistence.*;
@@ -26,6 +27,7 @@ public class FoodDish {
     @Column(name="catalogid")
     private String catalogid;
 
+    @JsonIgnore
     @ManyToMany(mappedBy = "foodDishes")
     private Set<MenuItem> menuItems = new HashSet<>();
 
@@ -34,4 +36,5 @@ public class FoodDish {
         this.dishName = name;
         this.catalogid = id;
     }
+
 }

@@ -35,9 +35,6 @@ public class MenuItem {
             inverseJoinColumns = @JoinColumn(name = "food_dish_id", referencedColumnName = "id"))
     private Set<FoodDish> foodDishes = new HashSet<>();
 
-    @OneToMany(mappedBy = "menuItem")
-    private Set<MenuItemUsage> menuItemUsages = new HashSet<>();
-
     private boolean isLow;
     public boolean isLow() {
         return amount < 10;
@@ -52,5 +49,18 @@ public class MenuItem {
                 this.amount = amount;
                 this.unit = unit;
     }
+
+    @Override
+    public String toString() {
+        return "MenuItem{" +
+                "id=" + id +
+                ", itemName='" + itemName + '\'' +
+                ", imageUrl='" + imageUrl + '\'' +
+                ", amount=" + amount +
+                ", unit=" + unit +
+                ", isLow=" + isLow +
+                '}';
+    }
+
 
 }
