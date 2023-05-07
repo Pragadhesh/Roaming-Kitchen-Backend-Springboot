@@ -26,7 +26,7 @@ public class MenuItem {
     @Column(name = "imageUrl",length = 1000)
     private String imageUrl;
 
-    private String amount;
+    private Double amount;
     private UnitOfMeasurement unit;
 
     @ManyToMany(cascade = CascadeType.ALL)
@@ -40,17 +40,17 @@ public class MenuItem {
 
     private boolean isLow;
     public boolean isLow() {
-        int amount = Integer.parseInt(this.amount);
         return amount < 10;
     }
     public void setLow(boolean isLow) {
         this.isLow = isLow;
     }
 
-    public MenuItem(String itemName, String imageUrl, String amount, UnitOfMeasurement unit) {
+    public MenuItem(String itemName, String imageUrl, Double amount, UnitOfMeasurement unit) {
                 this.itemName = itemName;
                 this.imageUrl = imageUrl;
                 this.amount = amount;
                 this.unit = unit;
     }
+
 }

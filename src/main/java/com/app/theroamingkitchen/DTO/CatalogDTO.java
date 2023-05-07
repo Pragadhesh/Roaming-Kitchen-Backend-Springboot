@@ -11,6 +11,8 @@ import java.util.List;
 @ToString
 public class CatalogDTO {
     private String dishName;
+    private String description;
     private String imageUrl;
     private List<ItemVariationDTO> variations;
+    private List<MenuItemResultDTO> ingredients;
 }

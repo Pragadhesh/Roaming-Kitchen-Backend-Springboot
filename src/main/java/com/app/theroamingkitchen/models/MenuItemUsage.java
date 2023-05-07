@@ -27,5 +27,11 @@ public class MenuItemUsage {
 
     @Column(name = "quantity_used")
     private Double quantityUsed;
+
+    public MenuItemUsage(MenuItem mts, FoodDish foodDish, Double amount) {
+        this.menuItem = mts;
+        this.foodDish = foodDish;
+        this.quantityUsed = amount;
+    }
 }
 

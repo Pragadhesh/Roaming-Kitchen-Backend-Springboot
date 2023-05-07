@@ -28,4 +28,10 @@ public class FoodDish {
 
     @ManyToMany(mappedBy = "foodDishes")
     private Set<MenuItem> menuItems = new HashSet<>();
+
+    public FoodDish(String name, String id)
+    {
+        this.dishName = name;
+        this.catalogid = id;
+    }
 }

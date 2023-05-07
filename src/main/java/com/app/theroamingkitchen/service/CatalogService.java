@@ -2,6 +2,14 @@ package com.app.theroamingkitchen.service;
 
 import com.app.theroamingkitchen.DTO.CatalogDTO;
 import com.app.theroamingkitchen.DTO.ItemVariationDTO;
+import com.app.theroamingkitchen.DTO.MenuItemDTO;
+import com.app.theroamingkitchen.DTO.MenuItemResultDTO;
+import com.app.theroamingkitchen.models.FoodDish;
+import com.app.theroamingkitchen.models.MenuItem;
+import com.app.theroamingkitchen.models.MenuItemUsage;
+import com.app.theroamingkitchen.repository.FoodDishRepository;
+import com.app.theroamingkitchen.repository.MenuItemRepository;
+import com.app.theroamingkitchen.repository.MenuItemUsageRepository;
 import com.squareup.square.Environment;
 import com.squareup.square.SquareClient;
 import com.squareup.square.api.CatalogApi;
@@ -9,6 +17,7 @@ import com.squareup.square.exceptions.ApiException;
 import com.squareup.square.models.*;
 import com.squareup.square.utilities.FileWrapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +29,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -34,7 +40,16 @@ public class CatalogService<FileUrlWrapper> {
     @Value("${squareaccesstoken}")
     private String squareaccesstoken;
 
-    public <UrlWrapper> ResponseEntity<Object> createCatalogObject(CatalogDTO catalog) {
+    @Autowired
+    MenuItemRepository menuItemRepository;
+
+    @Autowired
+    MenuItemUsageRepository menuItemUsageRepository;
+
+    @Autowired
+    FoodDishRepository foodDishRepository;
+
+    public ResponseEntity<Object> createCatalogObject(CatalogDTO catalog) {
         log.info("Creating catalog object");
         try {
             SquareClient client = new SquareClient.Builder()
@@ -146,10 +161,64 @@ public class CatalogService<FileUrlWrapper> {
                     });
 
             CatalogObject catalogObject = future.join(); // Wait for the async call to complete
-            return new ResponseEntity<>(catalogObject, HttpStatus.OK);
+            String catalogObjectId = catalogObject.getId();
+            FoodDish foodDish = foodDishRepository.save(new FoodDish(catalog.getDishName(),catalogObjectId));
+
+            List<MenuItemResultDTO> menuitems = catalog.getIngredients();
+            Set<MenuItem> finalMenuItems = null;
+
+            for(int i=0; i<menuitems.size(); i++) {
+                MenuItemResultDTO mt = menuitems.get(i);
+                if(mt.getStatus())
+                {
+                    Optional<MenuItem> opmt = menuItemRepository.findById(mt.getId());
+                    MenuItem mts = opmt.orElse(null);
+                    if(mts != null) {
+                        MenuItemUsage usage = new MenuItemUsage(mts, foodDish, mt.getAmount());
+                        MenuItemUsage menuusage = menuItemUsageRepository.save(usage);
+
+                        Set<FoodDish> fdish = mts.getFoodDishes();
+                        fdish.add(foodDish);
+                        mts.setFoodDishes(fdish);
+                        Set<MenuItemUsage> mu = mts.getMenuItemUsages();
+                        mu.add(menuusage);
+                        mts.setMenuItemUsages(mu);
+                        MenuItem finalmenuitem =menuItemRepository.save(mts);
+                        finalMenuItems.add(finalmenuitem);
+                    }
+                    else {
+                        log.info("Cant find the menu item specified");
+                    }
+                }
+                else
+                {
+                    MenuItem mts = new MenuItem(mt.getItemName(),mt.getImageUrl(),
+                            0.0,mt.getUnit());
+                    Set<FoodDish> fdish = mts.getFoodDishes();
+                    fdish.add(foodDish);
+                    mts.setFoodDishes(fdish);
+                    MenuItem initial = menuItemRepository.save(mts);
+
+                    MenuItemUsage usage = new MenuItemUsage(initial, foodDish, mt.getAmount());
+                    MenuItemUsage menuusage = menuItemUsageRepository.save(usage);
+
+                    Set<MenuItemUsage> mu = initial.getMenuItemUsages();
+                    mu.add(menuusage);
+                    initial.setMenuItemUsages(mu);
+
+                    MenuItem finalmenuitem =menuItemRepository.save(initial);
+                    finalMenuItems.add(finalmenuitem);
+
+                }
+            }
+            foodDish.setMenuItems(finalMenuItems);
+            FoodDish finalfooddish = foodDishRepository.save(foodDish);
+
+            return new ResponseEntity<>(finalfooddish, HttpStatus.OK);
         } catch (Exception e) {
             log.info(e.getMessage());
             return new ResponseEntity<>("Error in creating catalog object", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
 }
