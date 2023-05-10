@@ -16,10 +16,8 @@ import com.app.theroamingkitchen.models.UnitOfMeasurement;
 import com.app.theroamingkitchen.repository.FoodDishRepository;
 import com.app.theroamingkitchen.repository.MenuItemRepository;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,17 +30,12 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.app.theroamingkitchen.models.UnitOfMeasurement.*;
 
@@ -68,9 +61,11 @@ public class FoodDishService {
     @Autowired
     MenuItemRepository menuItemRepository;
 
+    @Autowired
+    FoodDishRepository foodDishRepository;
+
     public ResponseEntity<Object> getMenuItems(FoodDishDTO foodDishDTO)
     {
-        log.info("Getting menu items");
         try
         {
             log.info("Generating menu items for "+foodDishDTO.getDishName() );
@@ -152,11 +147,6 @@ public class FoodDishService {
 
                 // Add all menu items to a list for verification
                 List<MenuItem> menuitems = menuItemRepository.findAll();
-                List<DetailsDTO> detailsDTO = new ArrayList<>();
-                menuitems.forEach(item ->
-                        detailsDTO.add(new DetailsDTO(item.getItemName(), item.getUnit()))
-                );
-                System.out.println(detailsDTO);
                 List<MenuItemResultDTO> results = new ArrayList<>();
 
                 // iterate over the ingredients and create a MenuItemDTO object for each one
@@ -166,14 +156,11 @@ public class FoodDishService {
                 // iterate over the ingredients and create a MenuItemDTO object for each one
                 int ingredientIndex = 0;
                 for (int i=0;i<size;i++) {
-
                     List<CompletableFuture<MenuItemResultDTO>> imageGenerationFutures = new ArrayList<>();
-                    System.out.println("Entered for with index "+ingredientIndex);
                     JsonNode ingredientNode = ingredientsNode.get(i);
                     JsonNode quantityNode = ingredientNode.get("quantity");
                     String quantity = quantityNode.fieldNames().next();
                     String value = quantityNode.get(quantity).toString();
-
                     String result;
                     if (value.matches("\\d+")) { // whole number
                         int intValue = Integer.parseInt(value);
@@ -200,37 +187,37 @@ public class FoodDishService {
                         result = String.valueOf(averageValue);
                     }
                     value = result;
-                    DetailsDTO dts = new DetailsDTO();
+                    UnitOfMeasurement finalunit = null;
                     if (quantity.startsWith("GR"))
                     {
-                        dts.setUnit(GRAM);
+                        finalunit=GRAM;
                     }
                     else if (quantity.startsWith("TE"))
                     {
-                        dts.setUnit(TEASPOON);
+                        finalunit=TEASPOON;
                     }
                     else if (quantity.startsWith("TA"))
                     {
-                        dts.setUnit(TABLESPOON);
+                        finalunit=TABLESPOON;
                     }
                     else if (quantity.startsWith("LI"))
                     {
-                        dts.setUnit(LITER);
+                        finalunit=LITER;
                     }
                     else if (quantity.startsWith("CU"))
                     {
-                        dts.setUnit(CUP);
+                        finalunit=CUP;
                     }
                     else
                     {
-                        dts.setUnit(PIECE);
+                        finalunit=PIECE;
                     }
 
-                    log.info("Generating name");
+                    String dishName = null;
                     String name = ingredientNode.get("name").asText();
                     if (name.split(" ").length == 1) { // Check if only one word
                         String outputString = name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
-                        dts.setDishName(outputString);
+                        dishName=outputString;
                     } else { // More than one word
                         String[] words = name.split(" ");
                         StringBuilder outputStringBuilder = new StringBuilder();
@@ -240,19 +227,25 @@ public class FoodDishService {
                             outputStringBuilder.append(firstLetter.toUpperCase()).append(restOfWord.toLowerCase()).append(" ");
                         }
                         String outputString = outputStringBuilder.toString().trim();
-                        dts.setDishName(outputString);
+                        dishName=outputString;
                     }
-                    System.out.println("DTS Generated");
-                    System.out.println(dts);
-                    if(detailsDTO.contains(dts))
+
+                    String finalDishName1 = dishName;
+                    OptionalInt matchIndex = IntStream.range(0, menuitems.size())
+                            .filter(dish -> menuitems.get(dish).getItemName().equals(finalDishName1))
+                            .findFirst();
+
+
+                    if(matchIndex.isPresent())
                     {
                         System.out.println("Entered if due to match");
+                        int index = matchIndex.getAsInt();
                         results.add(new MenuItemResultDTO(
-                                        menuitems.get(detailsDTO.indexOf(dts)).getId(),
-                                        dts.getDishName(),
-                                        menuitems.get(detailsDTO.indexOf(dts)).getImageUrl(),
+                                        menuitems.get(index).getId(),
+                                        finalDishName1,
+                                        menuitems.get(index).getImageUrl(),
                                         new Double(value),
-                                        dts.getUnit(),
+                                        finalunit,
                                         true
                                 )
                         );
@@ -261,10 +254,11 @@ public class FoodDishService {
                     else {
                         int finalI = i;
                         String finalValue = value;
+                        UnitOfMeasurement finalUnit = finalunit;
+                        String finalDishName = dishName;
                         CompletableFuture<MenuItemResultDTO> imageGenerationFuture = CompletableFuture.supplyAsync(() -> {
                             try {
-                                DetailsDTO localDts = dts;
-                                log.info("Generating image for food dish menu: " + localDts.getDishName());
+                                log.info("Generating image for food dish menu: " + finalDishName);
 
                                 // Set the request headers
                                 HttpHeaders headers1 = new HttpHeaders();
@@ -273,7 +267,7 @@ public class FoodDishService {
                                 String url1 = "https://api.openai.com/v1/images/generations";
                                 // Set the request body
                                 Map<String, Object> requestBody1 = new HashMap<>();
-                                requestBody1.put("prompt", "Ingredient-" + localDts.getDishName());
+                                requestBody1.put("prompt", "Ingredient-" + finalDishName);
                                 requestBody1.put("n", 1);
                                 requestBody1.put("size", "1024x1024");
                                 HttpEntity<Map<String, Object>> request1 = new HttpEntity<>(requestBody1, headers1);
@@ -294,7 +288,7 @@ public class FoodDishService {
                                         .build();
 
                                 // Generate a unique key for the object in S3
-                                String s3Key = "images/" +localDts.getDishName()+System.currentTimeMillis() + ".jpg";
+                                String s3Key = "images/" +finalDishName+System.currentTimeMillis() + ".jpg";
 
                                 File imageFile = File.createTempFile("image-", ".jpg");
                                 try (InputStream in = imageUrl.openStream(); OutputStream out = new FileOutputStream(imageFile)) {
@@ -315,15 +309,15 @@ public class FoodDishService {
 
                                 return new MenuItemResultDTO(
                                         (long) (finalI),
-                                        localDts.getDishName(),
+                                        finalDishName,
                                         publicUrl,
                                         new Double(finalValue),
-                                        localDts.getUnit(),
+                                        finalUnit,
                                         false
                                 );
                             } catch (Exception e) {
                                 // Handle exception if image generation fails
-                                log.error("Error generating image for dish: " + dts.getDishName(), e);
+                                log.error("Error generating image for dish: " + finalDishName, e);
                                 return null;
                             }
                         });
@@ -435,6 +429,19 @@ public class FoodDishService {
         {
             log.info(e.getMessage());
             return new ResponseEntity<>("Error in Generating image",HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public  ResponseEntity<Object> getAllFoodDish() {
+        log.info("Fetching all Recipes");
+        try
+        {
+            List<FoodDish> finalfooddish = foodDishRepository.findAll();
+            return new ResponseEntity<>(finalfooddish, HttpStatus.OK);
+        }
+        catch (Exception e)
+        {
+            return new ResponseEntity<>("Error in fetching the fooddish",HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

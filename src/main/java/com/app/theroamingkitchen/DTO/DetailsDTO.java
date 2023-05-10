@@ -10,5 +10,4 @@ import lombok.*;
 @ToString
 public class DetailsDTO {
     private String dishName;
-    private UnitOfMeasurement unit;
 }

@@ -40,6 +40,13 @@ public class FoodDishController {
     }
 
 
+    @GetMapping("/menu/recipes")
+    public ResponseEntity<Object> getAllRecipes()
+    {
+        return foodDishService.getAllFoodDish();
+    }
+
+
 
 
 }
