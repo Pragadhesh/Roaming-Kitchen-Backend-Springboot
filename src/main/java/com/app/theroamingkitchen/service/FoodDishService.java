@@ -12,9 +12,11 @@ import com.app.theroamingkitchen.DTO.FoodDishDTO;
 import com.app.theroamingkitchen.DTO.MenuItemResultDTO;
 import com.app.theroamingkitchen.models.FoodDish;
 import com.app.theroamingkitchen.models.MenuItem;
+import com.app.theroamingkitchen.models.UnitOfMeasurement;
 import com.app.theroamingkitchen.repository.FoodDishRepository;
 import com.app.theroamingkitchen.repository.MenuItemRepository;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -35,6 +37,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -56,6 +61,9 @@ public class FoodDishService {
 
     @Value("${awssecretkey}")
     private String awssecretkey;
+
+    @Value("${apigatewayurl}")
+    private String apigatewayurl;
 
     @Autowired
     MenuItemRepository menuItemRepository;
@@ -131,198 +139,198 @@ public class FoodDishService {
                 }
                 JsonNode jsonContentNode = objectMapper.readTree(jsonContent);
                 log.info(String.valueOf(jsonContentNode));
-            JsonNode ingredientsNode = jsonContentNode.get("ingredients");
+                JsonNode ingredientsNode = jsonContentNode.get("ingredients");
 
-            int size;
-            if(ingredientsNode.size() < 11)
-            {
-                size = ingredientsNode.size();
-            }
-            else {
-                size = 10;
-            }
+                int size;
+                if(ingredientsNode.size() < 11)
+                {
+                    size = ingredientsNode.size();
+                }
+                else {
+                    size = 10;
+                }
 
-            // Add all menu items to a list for verification
-            List<MenuItem> menuitems = menuItemRepository.findAll();
-            List<DetailsDTO> detailsDTO = new ArrayList<>();
-            menuitems.forEach(item ->
-                    detailsDTO.add(new DetailsDTO(item.getItemName(), item.getUnit()))
-            );
-            System.out.println(detailsDTO);
-            List<MenuItemResultDTO> results = new ArrayList<>();
+                // Add all menu items to a list for verification
+                List<MenuItem> menuitems = menuItemRepository.findAll();
+                List<DetailsDTO> detailsDTO = new ArrayList<>();
+                menuitems.forEach(item ->
+                        detailsDTO.add(new DetailsDTO(item.getItemName(), item.getUnit()))
+                );
+                System.out.println(detailsDTO);
+                List<MenuItemResultDTO> results = new ArrayList<>();
 
-            // iterate over the ingredients and create a MenuItemDTO object for each one
+                // iterate over the ingredients and create a MenuItemDTO object for each one
                 List<List<CompletableFuture<MenuItemResultDTO>>> allImageGenerationFutures = new ArrayList<>();
 
 
-            // iterate over the ingredients and create a MenuItemDTO object for each one
+                // iterate over the ingredients and create a MenuItemDTO object for each one
                 int ingredientIndex = 0;
                 for (int i=0;i<size;i++) {
 
                     List<CompletableFuture<MenuItemResultDTO>> imageGenerationFutures = new ArrayList<>();
-                System.out.println("Entered for with index "+ingredientIndex);
-                JsonNode ingredientNode = ingredientsNode.get(i);
-                JsonNode quantityNode = ingredientNode.get("quantity");
-                String quantity = quantityNode.fieldNames().next();
-                String value = quantityNode.get(quantity).toString();
+                    System.out.println("Entered for with index "+ingredientIndex);
+                    JsonNode ingredientNode = ingredientsNode.get(i);
+                    JsonNode quantityNode = ingredientNode.get("quantity");
+                    String quantity = quantityNode.fieldNames().next();
+                    String value = quantityNode.get(quantity).toString();
 
-                String result;
-                if (value.matches("\\d+")) { // whole number
-                    int intValue = Integer.parseInt(value);
-                    // add logic to handle whole number input
-                    result = String.valueOf(intValue);
-                }
-                else if (value.matches("\\d+\\.\\d+")) { // decimal value
-                    double decimalValue = Double.parseDouble(value);
-                    // add logic to handle decimal input
-                    result = String.valueOf(decimalValue);
-                }
-                else if (value.matches("\\d+/\\d+")) { // fraction
-                    String[] parts = value.split("/");
-                    double decimalValue = Double.parseDouble(parts[0]) / Double.parseDouble(parts[1]);
-                    // add logic to handle fraction input
-                    result = String.valueOf(decimalValue);
-                }
-                else  { // range
-                    String[] parts = value.split("-");
-                    double rangeStart = Double.parseDouble(parts[0]);
-                    double rangeEnd = Double.parseDouble(parts[1]);
-                    double averageValue = (rangeStart + rangeEnd) / 2.0;
-                    // add logic to handle range input
-                    result = String.valueOf(averageValue);
-                }
-                value = result;
-                DetailsDTO dts = new DetailsDTO();
-                if (quantity.startsWith("GR"))
-                {
-                    dts.setUnit(GRAM);
-                }
-                else if (quantity.startsWith("TE"))
-                {
-                    dts.setUnit(TEASPOON);
-                }
-                else if (quantity.startsWith("TA"))
-                {
-                    dts.setUnit(TABLESPOON);
-                }
-                else if (quantity.startsWith("LI"))
-                {
-                    dts.setUnit(LITER);
-                }
-                else if (quantity.startsWith("CU"))
-                {
-                    dts.setUnit(CUP);
-                }
-                else
-                {
-                    dts.setUnit(PIECE);
-                }
-
-                log.info("Generating name");
-                String name = ingredientNode.get("name").asText();
-                if (name.split(" ").length == 1) { // Check if only one word
-                    String outputString = name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
-                    dts.setDishName(outputString);
-                } else { // More than one word
-                    String[] words = name.split(" ");
-                    StringBuilder outputStringBuilder = new StringBuilder();
-                    for (String word : words) {
-                        String firstLetter = word.substring(0, 1);
-                        String restOfWord = word.substring(1);
-                        outputStringBuilder.append(firstLetter.toUpperCase()).append(restOfWord.toLowerCase()).append(" ");
+                    String result;
+                    if (value.matches("\\d+")) { // whole number
+                        int intValue = Integer.parseInt(value);
+                        // add logic to handle whole number input
+                        result = String.valueOf(intValue);
                     }
-                    String outputString = outputStringBuilder.toString().trim();
-                    dts.setDishName(outputString);
-                }
-                System.out.println("DTS Generated");
-                System.out.println(dts);
-                if(detailsDTO.contains(dts))
-                {
-                    System.out.println("Entered if due to match");
-                   results.add(new MenuItemResultDTO(
-                            menuitems.get(detailsDTO.indexOf(dts)).getId(),
-                            dts.getDishName(),
-                            menuitems.get(detailsDTO.indexOf(dts)).getImageUrl(),
-                           new Double(value),
-                            dts.getUnit(),
-                            true
-                    )
-                   );
+                    else if (value.matches("\\d+\\.\\d+")) { // decimal value
+                        double decimalValue = Double.parseDouble(value);
+                        // add logic to handle decimal input
+                        result = String.valueOf(decimalValue);
+                    }
+                    else if (value.matches("\\d+/\\d+")) { // fraction
+                        String[] parts = value.split("/");
+                        double decimalValue = Double.parseDouble(parts[0]) / Double.parseDouble(parts[1]);
+                        // add logic to handle fraction input
+                        result = String.valueOf(decimalValue);
+                    }
+                    else  { // range
+                        String[] parts = value.split("-");
+                        double rangeStart = Double.parseDouble(parts[0]);
+                        double rangeEnd = Double.parseDouble(parts[1]);
+                        double averageValue = (rangeStart + rangeEnd) / 2.0;
+                        // add logic to handle range input
+                        result = String.valueOf(averageValue);
+                    }
+                    value = result;
+                    DetailsDTO dts = new DetailsDTO();
+                    if (quantity.startsWith("GR"))
+                    {
+                        dts.setUnit(GRAM);
+                    }
+                    else if (quantity.startsWith("TE"))
+                    {
+                        dts.setUnit(TEASPOON);
+                    }
+                    else if (quantity.startsWith("TA"))
+                    {
+                        dts.setUnit(TABLESPOON);
+                    }
+                    else if (quantity.startsWith("LI"))
+                    {
+                        dts.setUnit(LITER);
+                    }
+                    else if (quantity.startsWith("CU"))
+                    {
+                        dts.setUnit(CUP);
+                    }
+                    else
+                    {
+                        dts.setUnit(PIECE);
+                    }
 
-                }
-                else {
-                    int finalI = i;
-                    String finalValue = value;
-                    CompletableFuture<MenuItemResultDTO> imageGenerationFuture = CompletableFuture.supplyAsync(() -> {
-                        try {
-                            DetailsDTO localDts = dts;
-                            log.info("Generating image for food dish menu: " + localDts.getDishName());
-
-                            // Set the request headers
-                            HttpHeaders headers1 = new HttpHeaders();
-                            headers1.setContentType(MediaType.APPLICATION_JSON);
-                            headers1.set("Authorization", "Bearer " + imageaccesskey);
-                            String url1 = "https://api.openai.com/v1/images/generations";
-                            // Set the request body
-                            Map<String, Object> requestBody1 = new HashMap<>();
-                            requestBody1.put("prompt", "Ingredient-" + localDts.getDishName());
-                            requestBody1.put("n", 1);
-                            requestBody1.put("size", "1024x1024");
-                            HttpEntity<Map<String, Object>> request1 = new HttpEntity<>(requestBody1, headers1);
-                            RestTemplate restTemplate1 = new RestTemplate();
-                            ResponseEntity<String> response1 = restTemplate1.postForEntity(url1, request1, String.class);
-                            ObjectMapper objectMapper1 = new ObjectMapper();
-
-                            JsonNode jsonNode = objectMapper1.readTree(response1.getBody());
-                            String image = jsonNode.get("data").get(0).get("url").asText();
-
-                            URL imageUrl = new URL(image);
-
-                            BasicAWSCredentials credentials = new BasicAWSCredentials(awsaccesskey, awssecretkey);
-
-                            AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
-                                    .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                                    .withRegion("ap-south-1")
-                                    .build();
-
-                            // Generate a unique key for the object in S3
-                            String s3Key = "images/" + System.currentTimeMillis() + ".jpg";
-
-                            File imageFile = File.createTempFile("image-", ".jpg");
-                            try (InputStream in = imageUrl.openStream(); OutputStream out = new FileOutputStream(imageFile)) {
-                                byte[] buffer = new byte[4096];
-                                int bytesRead;
-                                while ((bytesRead = in.read(buffer)) != -1) {
-                                    out.write(buffer, 0, bytesRead);
-                                }
-                            }
-
-                            // Upload the image to S3
-                            PutObjectRequest putRequest = new PutObjectRequest("theroamingkitchen", s3Key, imageFile)
-                                    .withCannedAcl(CannedAccessControlList.PublicRead);
-                            PutObjectResult putResult = s3Client.putObject(putRequest);
-
-                            // Get the public URL of the image in S3
-                            String publicUrl = s3Client.getUrl("theroamingkitchen", s3Key).toString();
-
-                            return new MenuItemResultDTO(
-                                    (long) (finalI),
-                                    localDts.getDishName(),
-                                    publicUrl,
-                                    new Double(finalValue),
-                                    localDts.getUnit(),
-                                    false
-                            );
-                        } catch (Exception e) {
-                            // Handle exception if image generation fails
-                            log.error("Error generating image for dish: " + dts.getDishName(), e);
-                            return null;
+                    log.info("Generating name");
+                    String name = ingredientNode.get("name").asText();
+                    if (name.split(" ").length == 1) { // Check if only one word
+                        String outputString = name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
+                        dts.setDishName(outputString);
+                    } else { // More than one word
+                        String[] words = name.split(" ");
+                        StringBuilder outputStringBuilder = new StringBuilder();
+                        for (String word : words) {
+                            String firstLetter = word.substring(0, 1);
+                            String restOfWord = word.substring(1);
+                            outputStringBuilder.append(firstLetter.toUpperCase()).append(restOfWord.toLowerCase()).append(" ");
                         }
-                    });
-                    imageGenerationFutures.add(imageGenerationFuture);
-                }
+                        String outputString = outputStringBuilder.toString().trim();
+                        dts.setDishName(outputString);
+                    }
+                    System.out.println("DTS Generated");
+                    System.out.println(dts);
+                    if(detailsDTO.contains(dts))
+                    {
+                        System.out.println("Entered if due to match");
+                        results.add(new MenuItemResultDTO(
+                                        menuitems.get(detailsDTO.indexOf(dts)).getId(),
+                                        dts.getDishName(),
+                                        menuitems.get(detailsDTO.indexOf(dts)).getImageUrl(),
+                                        new Double(value),
+                                        dts.getUnit(),
+                                        true
+                                )
+                        );
+
+                    }
+                    else {
+                        int finalI = i;
+                        String finalValue = value;
+                        CompletableFuture<MenuItemResultDTO> imageGenerationFuture = CompletableFuture.supplyAsync(() -> {
+                            try {
+                                DetailsDTO localDts = dts;
+                                log.info("Generating image for food dish menu: " + localDts.getDishName());
+
+                                // Set the request headers
+                                HttpHeaders headers1 = new HttpHeaders();
+                                headers1.setContentType(MediaType.APPLICATION_JSON);
+                                headers1.set("Authorization", "Bearer " + imageaccesskey);
+                                String url1 = "https://api.openai.com/v1/images/generations";
+                                // Set the request body
+                                Map<String, Object> requestBody1 = new HashMap<>();
+                                requestBody1.put("prompt", "Ingredient-" + localDts.getDishName());
+                                requestBody1.put("n", 1);
+                                requestBody1.put("size", "1024x1024");
+                                HttpEntity<Map<String, Object>> request1 = new HttpEntity<>(requestBody1, headers1);
+                                RestTemplate restTemplate1 = new RestTemplate();
+                                ResponseEntity<String> response1 = restTemplate1.postForEntity(url1, request1, String.class);
+                                ObjectMapper objectMapper1 = new ObjectMapper();
+
+                                JsonNode jsonNode = objectMapper1.readTree(response1.getBody());
+                                String image = jsonNode.get("data").get(0).get("url").asText();
+
+                                URL imageUrl = new URL(image);
+
+                                BasicAWSCredentials credentials = new BasicAWSCredentials(awsaccesskey, awssecretkey);
+
+                                AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
+                                        .withCredentials(new AWSStaticCredentialsProvider(credentials))
+                                        .withRegion("ap-south-1")
+                                        .build();
+
+                                // Generate a unique key for the object in S3
+                                String s3Key = "images/" +localDts.getDishName()+System.currentTimeMillis() + ".jpg";
+
+                                File imageFile = File.createTempFile("image-", ".jpg");
+                                try (InputStream in = imageUrl.openStream(); OutputStream out = new FileOutputStream(imageFile)) {
+                                    byte[] buffer = new byte[4096];
+                                    int bytesRead;
+                                    while ((bytesRead = in.read(buffer)) != -1) {
+                                        out.write(buffer, 0, bytesRead);
+                                    }
+                                }
+
+                                // Upload the image to S3
+                                PutObjectRequest putRequest = new PutObjectRequest("theroamingkitchen", s3Key, imageFile)
+                                        .withCannedAcl(CannedAccessControlList.PublicRead);
+                                PutObjectResult putResult = s3Client.putObject(putRequest);
+
+                                // Get the public URL of the image in S3
+                                String publicUrl = s3Client.getUrl("theroamingkitchen", s3Key).toString();
+
+                                return new MenuItemResultDTO(
+                                        (long) (finalI),
+                                        localDts.getDishName(),
+                                        publicUrl,
+                                        new Double(finalValue),
+                                        localDts.getUnit(),
+                                        false
+                                );
+                            } catch (Exception e) {
+                                // Handle exception if image generation fails
+                                log.error("Error generating image for dish: " + dts.getDishName(), e);
+                                return null;
+                            }
+                        });
+                        imageGenerationFutures.add(imageGenerationFuture);
+                    }
                     allImageGenerationFutures.add(imageGenerationFutures);
-            }
+                }
                 // Wait for all image generation tasks to complete
                 CompletableFuture<Void> allImageGenerationFuture = CompletableFuture.allOf(
                         allImageGenerationFutures.stream()
@@ -368,6 +376,7 @@ public class FoodDishService {
             return new ResponseEntity<>("Error in generating items", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
 
     public ResponseEntity<Object> getImagesforDescription(FoodDishDTO foodDishDTO)
     {

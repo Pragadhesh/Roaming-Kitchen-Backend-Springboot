@@ -17,4 +17,5 @@ public class MenuItemResultDTO {
     private Double amount;
     private UnitOfMeasurement unit;
     private Boolean status;
+
 }

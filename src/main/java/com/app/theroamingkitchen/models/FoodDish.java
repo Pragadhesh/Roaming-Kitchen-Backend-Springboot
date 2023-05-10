@@ -27,14 +27,18 @@ public class FoodDish {
     @Column(name="catalogid")
     private String catalogid;
 
+    @Column(name = "imageUrl",length = 1000)
+    private String imageUrl;
+
     @JsonIgnore
     @ManyToMany(mappedBy = "foodDishes")
     private Set<MenuItem> menuItems = new HashSet<>();
 
-    public FoodDish(String name, String id)
+    public FoodDish(String name, String id,String url)
     {
         this.dishName = name;
         this.catalogid = id;
+        this.imageUrl = url;
     }
 
 }

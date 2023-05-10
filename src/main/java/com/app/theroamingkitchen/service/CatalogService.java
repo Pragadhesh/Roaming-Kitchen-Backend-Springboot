@@ -163,7 +163,7 @@ public class CatalogService<FileUrlWrapper> {
 
             CatalogObject catalogObject = future.join();
             String catalogObjectId = catalogObject.getId();
-            FoodDish foodDish = foodDishRepository.save(new FoodDish(catalog.getDishName(),catalogObjectId));
+            FoodDish foodDish = foodDishRepository.save(new FoodDish(catalog.getDishName(),catalogObjectId,catalog.getImageUrl()));
 
             List<MenuItemResultDTO> menuitems = catalog.getIngredients();
             Set<MenuItem> finalMenuItems = new HashSet<>();
