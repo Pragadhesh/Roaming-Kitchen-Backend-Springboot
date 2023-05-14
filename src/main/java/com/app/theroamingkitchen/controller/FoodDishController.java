@@ -47,6 +47,11 @@ public class FoodDishController {
     }
 
 
-
+    @GetMapping("/menu/recipes/{catalogid}")
+    public ResponseEntity<Object> fetchRecipeDetails(@PathVariable("catalogid") String catalogid) {
+        FoodDishDTO foodDishDTO = new FoodDishDTO();
+        foodDishDTO.setCatalogId(catalogid);
+        return catalogService.fetchCatalogItemDetails(foodDishDTO);
+    }
 
 }

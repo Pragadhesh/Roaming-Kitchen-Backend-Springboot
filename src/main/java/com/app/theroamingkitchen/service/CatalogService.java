@@ -1,9 +1,6 @@
 package com.app.theroamingkitchen.service;
 
-import com.app.theroamingkitchen.DTO.CatalogDTO;
-import com.app.theroamingkitchen.DTO.ItemVariationDTO;
-import com.app.theroamingkitchen.DTO.MenuItemDTO;
-import com.app.theroamingkitchen.DTO.MenuItemResultDTO;
+import com.app.theroamingkitchen.DTO.*;
 import com.app.theroamingkitchen.models.FoodDish;
 import com.app.theroamingkitchen.models.MenuItem;
 import com.app.theroamingkitchen.models.MenuItemUsage;
@@ -193,7 +190,7 @@ public class CatalogService<FileUrlWrapper> {
                 else
                 {
                     MenuItem mts = new MenuItem(mt.getItemName(),mt.getImageUrl(),
-                            0.0,mt.getUnit());
+                            0.0,mt.getUnit(),false);
                     Set<FoodDish> fdish = mts.getFoodDishes();
                     fdish.add(foodDish);
                     mts.setFoodDishes(fdish);
@@ -214,5 +211,58 @@ public class CatalogService<FileUrlWrapper> {
             return new ResponseEntity<>("Error in creating catalog object", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    public ResponseEntity<Object> fetchCatalogItemDetails(FoodDishDTO fooddishdto)
+    {
+        try
+        {
+            FoodDish foodDish = foodDishRepository.findFirstByCatalogid(fooddishdto.getCatalogId());
+            if (foodDish == null)
+            {
+                return new ResponseEntity<>("No fooddish found",HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            else
+            {
+                UpdateCatalogItemDTO catalogitem = new UpdateCatalogItemDTO();
+                catalogitem.setFoodDish(foodDish);
+                catalogitem.setMenuitems(foodDish.getMenuItems());
+                SquareClient client = new SquareClient.Builder()
+                        .environment(Environment.SANDBOX)
+                        .accessToken(squareaccesstoken)
+                        .build();
+                // Create an instance of the Catalog API
+                CatalogApi catalogApi = client.getCatalogApi();
+
+                catalogApi.retrieveCatalogObjectAsync(fooddishdto.getCatalogId(), null, null)
+                        .thenAccept(result -> {
+                            // Extract the catalog item data
+                            CatalogObject catalogObject = result.getObject();
+                            if (catalogObject.getType().equals("ITEM")) {
+                                CatalogItem itemObject = catalogObject.getItemData();
+                                catalogitem.setAvailability(itemObject.getAvailableOnline());
+
+                            }
+                        })
+                        .exceptionally(exception -> {
+                            System.out.println("Failed to make the request");
+                            System.out.println(String.format("Exception: %s", exception.getMessage()));
+                            return null;
+                        })
+                        .join();
+                return new ResponseEntity<>(catalogitem,HttpStatus.OK);
+
+            }
+
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            log.info(e.getMessage());
+            return new ResponseEntity<>("Error in fetching object details", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+
+
 
 }

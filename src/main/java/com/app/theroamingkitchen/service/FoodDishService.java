@@ -246,7 +246,8 @@ public class FoodDishService {
                                         menuitems.get(index).getImageUrl(),
                                         new Double(value),
                                         finalunit,
-                                        true
+                                        true,
+                                        menuitems.get(index).isRecipeLock()
                                 )
                         );
 
@@ -313,6 +314,7 @@ public class FoodDishService {
                                         publicUrl,
                                         new Double(finalValue),
                                         finalUnit,
+                                        false,
                                         false
                                 );
                             } catch (Exception e) {

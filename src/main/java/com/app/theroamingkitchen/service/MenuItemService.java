@@ -8,10 +8,15 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.app.theroamingkitchen.DTO.MenuItemDTO;
+import com.app.theroamingkitchen.models.FoodDish;
 import com.app.theroamingkitchen.models.MenuItem;
 import com.app.theroamingkitchen.repository.MenuItemRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.squareup.square.Environment;
+import com.squareup.square.SquareClient;
+import com.squareup.square.api.CatalogApi;
+import com.squareup.square.models.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +31,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +49,9 @@ public class MenuItemService {
 
     @Value("${awssecretkey}")
     private String awssecretkey;
+
+    @Value("${squareaccesstoken}")
+    private String squareaccesstoken;
 
     public  ResponseEntity<Object> addMenuItem(MenuItemDTO menuitem)
     {
@@ -122,7 +131,7 @@ public class MenuItemService {
               menuitem.setImageUrl(publicUrl);
               MenuItem finalmenu = new MenuItem(
                       menuitem.getItemName(), menuitem.getImageUrl(), menuitem.getAmount(),
-                      menuitem.getUnit()
+                      menuitem.getUnit(),false
               );
               finalmenu.setLow(finalmenu.isLow());
               MenuItem mt = menuItemRepository.save(finalmenu);
@@ -140,33 +149,88 @@ public class MenuItemService {
       }
     }
 
-    public  ResponseEntity<Object> updateMenuItem(MenuItemDTO menuitemdto) {
+
+    public ResponseEntity<Object> updateMenuItem(MenuItemDTO menuitemdto) {
         log.info("Updating Menu Item");
-        try
-        {
+        try {
             Optional<MenuItem> menuItem = menuItemRepository.findById(menuitemdto.getId());
             MenuItem mt = menuItem.orElse(null);
-            if (mt == null)
-            {
-                return new ResponseEntity<>("No Items found",HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-            else
-            {
+            if (mt == null) {
+                return new ResponseEntity<>("No Items found", HttpStatus.INTERNAL_SERVER_ERROR);
+            } else {
+                CompletableFuture<Void> apiCallFuture = CompletableFuture.completedFuture(null);
+                if (menuitemdto.getRecipeLock() && !mt.isRecipeLock()) {
+                    log.info("Locking all recipes");
+                    Set<FoodDish> foodDishes = mt.getFoodDishes();
+                    LinkedList<String> objectIds = new LinkedList<>();
+                    for (FoodDish foodDish : foodDishes) {
+                        String objectId = foodDish.getCatalogid();
+                        objectIds.add(objectId);
+                    }
+                    if (objectIds.size() > 0) {
+                        SquareClient client = new SquareClient.Builder()
+                                .environment(Environment.SANDBOX)
+                                .accessToken(squareaccesstoken)
+                                .build();
+                        // Create an instance of the Catalog API
+                        CatalogApi catalogApi = client.getCatalogApi();
+                        BatchRetrieveCatalogObjectsRequest body = new BatchRetrieveCatalogObjectsRequest.Builder(objectIds)
+                                .build();
+                        CompletableFuture<List<CatalogObject>> apiCall = catalogApi.batchRetrieveCatalogObjectsAsync(body)
+                                .thenCompose(result -> {
+                                    List<CatalogObject> catalogObjects = new ArrayList<>(result.getObjects());
+                                    LinkedList<CatalogObject> updatedObjects = new LinkedList<>();
+                                    for (CatalogObject catalogObject : catalogObjects) {
+                                        CatalogItem item = catalogObject.getItemData();
+                                        CatalogItem updateditem = new CatalogItem.Builder()
+                                                .name(item.getName())
+                                                .description(item.getDescription())
+                                                .imageIds(item.getImageIds())
+                                                .availableOnline(false)
+                                                .variations(item.getVariations())
+                                                .build();
+                                        CatalogObject newcatalogObject = new CatalogObject.Builder("ITEM", catalogObject.getId())
+                                                .itemData(updateditem)
+                                                .version(catalogObject.getVersion())
+                                                .build();
+                                        updatedObjects.add(newcatalogObject);
+                                    }
+                                    CatalogObjectBatch catalogObjectBatch = new CatalogObjectBatch.Builder(updatedObjects)
+                                            .build();
+                                    LinkedList<CatalogObjectBatch> batches = new LinkedList<>();
+                                    batches.add(catalogObjectBatch);
+                                    BatchUpsertCatalogObjectsRequest newbody = new BatchUpsertCatalogObjectsRequest.Builder(UUID.randomUUID().toString(), batches)
+                                            .build();
+                                    return catalogApi.batchUpsertCatalogObjectsAsync(newbody)
+                                            .thenApply(result1 -> catalogObjects);
+                                });
+                        apiCallFuture = apiCall.thenAccept(result -> {
+                            System.out.println("Locked successfully");
+                        }).exceptionally(exception -> {
+                            System.out.println("Failed to make the request");
+                            System.out.println(String.format("Exception: %s", exception.getMessage()));
+                            return null;
+                        });
+                    }
+                }
+                apiCallFuture.join(); // Wait for the API call to complete
                 mt.setAmount(menuitemdto.getAmount());
                 mt.setLow(mt.isLow());
+                mt.setRecipeLock(menuitemdto.getRecipeLock());
                 MenuItem mts = menuItemRepository.save(mt);
-                log.info("Updated menu item "+ mts);
+                log.info("Updated menu item " + mts);
                 List<MenuItem> finalmenuItems = menuItemRepository.findAll();
                 return new ResponseEntity<>(finalmenuItems, HttpStatus.OK);
             }
         }
         catch (Exception e)
         {
-            return new ResponseEntity<>("Error in updating the item",HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>("Error in Updating the menu item",HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    public  ResponseEntity<Object> getMenuItems() {
+
+            public  ResponseEntity<Object> getMenuItems() {
         log.info("Fetching all Menu Items");
         try
         {

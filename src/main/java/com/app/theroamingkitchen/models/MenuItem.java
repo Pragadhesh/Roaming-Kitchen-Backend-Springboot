@@ -36,6 +36,9 @@ public class MenuItem {
     private Set<FoodDish> foodDishes = new HashSet<>();
 
     private boolean isLow;
+
+    private boolean recipeLock;
+
     public boolean isLow() {
         return amount < 10;
     }
@@ -43,11 +46,12 @@ public class MenuItem {
         this.isLow = isLow;
     }
 
-    public MenuItem(String itemName, String imageUrl, Double amount, UnitOfMeasurement unit) {
+    public MenuItem(String itemName, String imageUrl, Double amount, UnitOfMeasurement unit, Boolean recipeLock) {
                 this.itemName = itemName;
                 this.imageUrl = imageUrl;
                 this.amount = amount;
                 this.unit = unit;
+                this.recipeLock = recipeLock;
     }
 
     @Override

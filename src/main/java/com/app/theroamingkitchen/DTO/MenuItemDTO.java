@@ -15,4 +15,5 @@ public class MenuItemDTO {
     private String imageUrl;
     private Double amount;
     private UnitOfMeasurement unit;
+    private Boolean recipeLock;
 }
