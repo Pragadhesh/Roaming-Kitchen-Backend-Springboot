@@ -2,6 +2,7 @@ package com.app.theroamingkitchen.controller;
 
 import com.app.theroamingkitchen.DTO.CatalogDTO;
 import com.app.theroamingkitchen.DTO.FoodDishDTO;
+import com.app.theroamingkitchen.DTO.UpdateRecipeDTO;
 import com.app.theroamingkitchen.service.CatalogService;
 import com.app.theroamingkitchen.service.FoodDishService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +53,11 @@ public class FoodDishController {
         FoodDishDTO foodDishDTO = new FoodDishDTO();
         foodDishDTO.setCatalogId(catalogid);
         return catalogService.fetchCatalogItemDetails(foodDishDTO);
+    }
+
+    @PostMapping("/menu/recipes")
+    public ResponseEntity<Object> updateRecipeDetails(@RequestBody UpdateRecipeDTO updateRecipeDTO){
+        return catalogService.updateCatalogItem(updateRecipeDTO);
     }
 
 }

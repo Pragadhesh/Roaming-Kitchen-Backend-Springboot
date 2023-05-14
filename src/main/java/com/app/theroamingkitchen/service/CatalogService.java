@@ -262,6 +262,69 @@ public class CatalogService<FileUrlWrapper> {
     }
 
 
+    public ResponseEntity<Object> updateCatalogItem(UpdateRecipeDTO updateRecipeDTO)
+    {
+        try
+        {
+            CompletableFuture<Void> apiCallFuture = CompletableFuture.completedFuture(null);
+            LinkedList<String> objectIds = new LinkedList<>();
+            objectIds.add(updateRecipeDTO.getCatalogid());
+            if (objectIds.size() > 0) {
+                SquareClient client = new SquareClient.Builder()
+                        .environment(Environment.SANDBOX)
+                        .accessToken(squareaccesstoken)
+                        .build();
+                // Create an instance of the Catalog API
+                CatalogApi catalogApi = client.getCatalogApi();
+                BatchRetrieveCatalogObjectsRequest body = new BatchRetrieveCatalogObjectsRequest.Builder(objectIds)
+                        .build();
+                CompletableFuture<List<CatalogObject>> apiCall = catalogApi.batchRetrieveCatalogObjectsAsync(body)
+                        .thenCompose(result -> {
+                            List<CatalogObject> catalogObjects = new ArrayList<>(result.getObjects());
+                            LinkedList<CatalogObject> updatedObjects = new LinkedList<>();
+                            for (CatalogObject catalogObject : catalogObjects) {
+                                CatalogItem item = catalogObject.getItemData();
+                                CatalogItem updateditem = new CatalogItem.Builder()
+                                        .name(item.getName())
+                                        .description(item.getDescription())
+                                        .imageIds(item.getImageIds())
+                                        .availableOnline(updateRecipeDTO.getAvailability())
+                                        .variations(item.getVariations())
+                                        .build();
+                                CatalogObject newcatalogObject = new CatalogObject.Builder("ITEM", catalogObject.getId())
+                                        .itemData(updateditem)
+                                        .version(catalogObject.getVersion())
+                                        .build();
+                                updatedObjects.add(newcatalogObject);
+                            }
+                            CatalogObjectBatch catalogObjectBatch = new CatalogObjectBatch.Builder(updatedObjects)
+                                    .build();
+                            LinkedList<CatalogObjectBatch> batches = new LinkedList<>();
+                            batches.add(catalogObjectBatch);
+                            BatchUpsertCatalogObjectsRequest newbody = new BatchUpsertCatalogObjectsRequest.Builder(UUID.randomUUID().toString(), batches)
+                                    .build();
+                            return catalogApi.batchUpsertCatalogObjectsAsync(newbody)
+                                    .thenApply(result1 -> catalogObjects);
+                        });
+                apiCallFuture = apiCall.thenAccept(result -> {
+                    System.out.println("Updated item successfully");
+                }).exceptionally(exception -> {
+                    System.out.println("Failed to make the request");
+                    System.out.println(String.format("Exception: %s", exception.getMessage()));
+                    return null;
+                });
+            }
+            apiCallFuture.join();
+            return new ResponseEntity<>("Item updated successfully",HttpStatus.OK);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            log.info(e.getMessage());
+            return new ResponseEntity<>("Error in updating object details", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
 
 
 
