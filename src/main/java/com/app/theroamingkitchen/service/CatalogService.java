@@ -325,7 +325,78 @@ public class CatalogService<FileUrlWrapper> {
     }
 
 
+    public ResponseEntity<Object> fetchAllCatalogItems() {
+        try {
+            SquareClient client = new SquareClient.Builder()
+                    .environment(Environment.SANDBOX)
+                    .accessToken(squareaccesstoken)
+                    .build();
+
+            // Create an instance of the Catalog API
+            CatalogApi catalogApi = client.getCatalogApi();
 
 
+            List<CatalogObject> items = new ArrayList<>();
+            List<CatalogObject> itemimages = new ArrayList<>();
+            List<String> imageids = new ArrayList<>();
+
+            CompletableFuture<Void> apiCallFuture = catalogApi.listCatalogAsync(
+                            null,
+                            "ITEM",
+                            null)
+                    .thenAccept(result -> {
+                        for (CatalogObject catalogObject : result.getObjects()) {
+                            if(catalogObject.getItemData().getAvailableOnline()) {
+                                items.add(catalogObject);
+                                imageids.add(catalogObject.getItemData().getImageIds().get(0));
+                            }
+                        }
+                    })
+                    .exceptionally(exception -> {
+                        System.out.println("Failed to make the request");
+                        System.out.println(String.format("Exception: %s", exception.getMessage()));
+                        return null;
+                    });
+            apiCallFuture.join(); // Wait for the API call to complete
+
+            if(items.size()>0) {
+                BatchRetrieveCatalogObjectsRequest body = new BatchRetrieveCatalogObjectsRequest.Builder(imageids)
+                        .build();
+
+                CompletableFuture<Void> generateImageUrlsFuture = catalogApi.batchRetrieveCatalogObjectsAsync(body)
+                        .thenAccept(result -> {
+                            itemimages.addAll(result.getObjects());
+                        })
+                        .exceptionally(exception -> {
+                            System.out.println("Failed to make the request");
+                            System.out.println(String.format("Exception: %s", exception.getMessage()));
+                            return null;
+                        });
+                generateImageUrlsFuture.join();
+
+                List<CatalogItemDTO> catalogItems = new ArrayList<>();
+                for (int i = 0; i < items.size(); i++) {
+
+                    CatalogItem itmdata = items.get(i).getItemData();
+                    CatalogItemDTO item = new CatalogItemDTO(
+                            items.get(i).getId(),
+                            itmdata.getName(),
+                            itmdata.getDescription(),
+                            itmdata.getAvailableOnline(),
+                            itemimages.get(i).getImageData().getUrl(),
+                            itmdata.getVariations()
+                    );
+                    catalogItems.add(item);
+                }
+
+                return new ResponseEntity<>(catalogItems, HttpStatus.OK);
+            }
+            return new ResponseEntity<>(items,HttpStatus.OK);
+        } catch (Exception e) {
+            e.printStackTrace();
+            log.info(e.getMessage());
+            return new ResponseEntity<>("Error in fetching the catalog items", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 
 }

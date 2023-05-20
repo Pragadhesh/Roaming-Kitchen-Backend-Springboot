@@ -60,4 +60,10 @@ public class FoodDishController {
         return catalogService.updateCatalogItem(updateRecipeDTO);
     }
 
+    @GetMapping("/catalog")
+    public ResponseEntity<Object> fetchAllCatalogItems()
+    {
+        return catalogService.fetchAllCatalogItems();
+    }
+
 }
