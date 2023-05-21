@@ -18,6 +18,11 @@ import com.app.theroamingkitchen.repository.MenuItemRepository;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.squareup.square.Environment;
+import com.squareup.square.SquareClient;
+import com.squareup.square.api.CatalogApi;
+import com.squareup.square.models.BatchRetrieveCatalogObjectsRequest;
+import com.squareup.square.models.CatalogObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +51,7 @@ public class FoodDishService {
     @Value("${aiaccesskey}")
     private String accesskey;
 
+
     @Value("${imageaccesskey}")
     private String imageaccesskey;
 
@@ -57,6 +63,9 @@ public class FoodDishService {
 
     @Value("${apigatewayurl}")
     private String apigatewayurl;
+
+    @Value("${squareaccesstoken}")
+    private String squareaccesstoken;
 
     @Autowired
     MenuItemRepository menuItemRepository;
@@ -446,5 +455,6 @@ public class FoodDishService {
             return new ResponseEntity<>("Error in fetching the fooddish",HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
 }
 

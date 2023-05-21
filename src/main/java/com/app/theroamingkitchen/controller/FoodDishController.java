@@ -47,6 +47,12 @@ public class FoodDishController {
         return foodDishService.getAllFoodDish();
     }
 
+    @GetMapping("/menu/availablerecipes")
+    public ResponseEntity<Object> getAllAvailableRecipes()
+    {
+        return catalogService.fetchAllCatalogItems();
+    }
+
 
     @GetMapping("/menu/recipes/{catalogid}")
     public ResponseEntity<Object> fetchRecipeDetails(@PathVariable("catalogid") String catalogid) {
