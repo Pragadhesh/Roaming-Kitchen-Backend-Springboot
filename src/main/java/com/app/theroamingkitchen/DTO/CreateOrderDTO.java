@@ -19,6 +19,8 @@ public class CreateOrderDTO {
     private String phone;
     private String customerlatitude;
     private String customerlongitude;
+    private String storelatitude;
+    private String storelongitude;
     private List<CartItemDTO> cartitems;
 
 }
