@@ -61,9 +61,6 @@ public class FoodDishService {
     @Value("${awssecretkey}")
     private String awssecretkey;
 
-    @Value("${apigatewayurl}")
-    private String apigatewayurl;
-
     @Value("${squareaccesstoken}")
     private String squareaccesstoken;
 
